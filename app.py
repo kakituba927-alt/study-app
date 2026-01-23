@@ -2,11 +2,15 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
+import json # ◀◀◀ 1. これを追加！
 
 # --- Googleスプレッドシートへの接続 ---
 try:
-    # StreamlitのSecretsから認証情報を取得
-    creds_dict = st.secrets["gcp_service_account"]
+    # StreamlitのSecretsから認証情報を「文字列として」取得
+    creds_json_str = st.secrets["gcp_service_account"]
+    # ◀◀◀ 2. 文字列を辞書形式に変換する
+    creds_dict = json.loads(creds_json_str)
+    
     creds = Credentials.from_service_account_info(creds_dict)
     gc = gspread.authorize(creds)
 
@@ -58,7 +62,7 @@ with tab2:
             st.success("新しい問題を追加しました！")
 
 
-# --- タB３: データを見る ---
+# --- タブ3: データを見る ---
 with tab3:
     st.header("データベースの全容")
     st.write("ここではデータベースの全体を見ることができます。")
@@ -66,3 +70,20 @@ with tab3:
     if data_all:
         df_all = pd.DataFrame(data_all)
         st.dataframe(df_all)
+```
+
+**2. 変更をGitHubにアップロード**
+コードを貼り替えたら、ファイルを保存し、Cursorのターミナルで以下の3つのコマンドを順番に実行してください。
+
+```bash
+git add .
+```
+
+```bash
+git commit -m "Fix secrets parsing error"
+```
+(↑ "Secretsの解析エラーを修正" という意味です)
+
+```bash
+git push
+```
