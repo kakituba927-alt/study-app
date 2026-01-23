@@ -66,21 +66,3 @@ with tab3:
     if data_all:
         df_all = pd.DataFrame(data_all)
         st.dataframe(df_all)
-```
-
-#### 3. 変更をGitHubにアップロード
-コードを書き換えたので、その変更をGitHubに反映させます。
-Cursorのターミナルで、以下の3つのコマンドを順番に実行してください。
-
-```bash
-git add .
-```
-
-```bash
-git commit -m "Add spreadsheet integration"
-```（↑ "スプレッドシート連携を追加" という意味です）
-
-```bash
-git push
-```
-（2回目以降は `git push` だけでOKです）
