@@ -36,7 +36,6 @@ with tab1:
     data = worksheet.get_all_records()
     if data:
         df = pd.DataFrame(data)
-        # スプレッドシートからランダムに1問選ぶ
         if st.button("次の問題を表示"):
             st.session_state.current_q = df.sample(1).iloc[0]
             st.session_state.answered = False
@@ -44,15 +43,16 @@ with tab1:
         if "current_q" in st.session_state:
             q = st.session_state.current_q
             st.subheader(f"問題: {q['問題']}")
-            # 選択肢を表示（スプレッドシートの列名が '選択肢' であると想定）
-            options = q['選択肢'].split(',')
+            
+            # 選択肢の表示（カンマ区切りをリストにする）
+            options = str(q['選択肢']).split(',')
             user_choice = st.radio("答えを選んでください", options)
             
             if st.button("回答する"):
                 st.session_state.answered = True
             
             if st.session_state.get('answered'):
-                if user_choice == q['正解']:
+                if user_choice == str(q['正解']):
                     st.success("⭕ 正解！")
                 else:
                     st.error(f"❌ 不正解... 正解は【{q['正解']}】でした。")
@@ -67,7 +67,7 @@ with tab2:
     
     if uploaded_file:
         with pdfplumber.open(uploaded_file) as pdf:
-            full_text = "".join([page.extract_text() for page in pdf.pages])
+            full_text = "".join([page.extract_text() for page in pdf.pages if page.extract_text()])
         
         st.write("📄 PDFの読み込みが完了しました。")
         num_questions = st.slider("作成する問題数", 1, 5, 3)
@@ -78,16 +78,14 @@ with tab2:
                 以下の資料から、消防昇任試験に出そうな5択問題を{num_questions}問作成してください。
                 出力は必ず以下のカンマ区切りのリスト形式（JSON）にしてください。
                 [
-                  {{"問題": "問題文", "選択肢": "A,B,C,D,E", "正解": "A", "解説": "解説文"}},
-                  ...
+                  {{"問題": "問題文", "選択肢": "A,B,C,D,E", "正解": "A", "解説": "解説文"}}
                 ]
                 資料:
                 {full_text[:3000]}
                 """
-               response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
-                # JSONとして解析
+                response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
+                
                 try:
-                    # Geminiが```json ... ```で囲む場合があるためトリミング
                     clean_res = response.text.replace('```json', '').replace('```', '').strip()
                     new_problems = json.loads(clean_res)
                     
@@ -95,7 +93,7 @@ with tab2:
                         worksheet.append_row([p['問題'], p['選択肢'], p['正解'], p['解説']])
                     
                     st.success(f"{len(new_problems)}問の問題をデータベースに追加しました！")
-                except:
+                except Exception as e:
                     st.error("AIの回答を読み込めませんでした。もう一度試してください。")
                     st.write(response.text)
 
@@ -106,7 +104,6 @@ with tab3:
     if all_data:
         st.dataframe(pd.DataFrame(all_data))
     if st.button("全データを消去（リセット）"):
-        # ヘッダー以外を削除（慎重に！）
         worksheet.clear()
         worksheet.append_row(["問題", "選択肢", "正解", "解説"])
         st.rerun()
