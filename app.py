@@ -29,7 +29,7 @@ try:
     gemini_key = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=gemini_key)
     # モデルの準備（gemini-1.5-flash を使用）
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     
 except Exception as e:
     st.error(f"接続エラーが発生しました。設定を確認してください: {e}")
