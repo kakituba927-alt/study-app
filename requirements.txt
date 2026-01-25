@@ -2,5 +2,4 @@ streamlit
 pandas
 gspread
 gspread-dataframe
-google-genai
-pdfplumber
+google-generativeai

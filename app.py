@@ -4,13 +4,13 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 import json
 import pdfplumber
-from google import genai
+import google.generativeai as genai  # 安定版に変更
 
 # --- 1. 初期設定（スプレッドシート & Gemini） ---
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 
 try:
-    # Google認証
+    # Googleスプレッドシート認証
     creds_json_str = st.secrets["gcp_service_account"]
     creds_dict = json.loads(creds_json_str)
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
@@ -18,11 +18,12 @@ try:
     spreadsheet = gc.open("消防アプリDB")
     worksheet = spreadsheet.worksheet("シート1")
     
-    # Gemini認証
-    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+    # Gemini認証（安定版の書き方）
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
 except Exception as e:
-    st.error(f"接続エラー: {e}")
+    st.error(f"接続エラーが発生しました。設定を確認してください: {e}")
     st.stop()
 
 # --- 2. アプリ画面の構成 ---
@@ -44,9 +45,8 @@ with tab1:
             q = st.session_state.current_q
             st.subheader(f"問題: {q['問題']}")
             
-            # 選択肢の表示（カンマ区切りをリストにする）
             options = str(q['選択肢']).split(',')
-            user_choice = st.radio("答えを選んでください", options)
+            user_choice = st.radio("答えを選んでください", options, key="quiz_radio")
             
             if st.button("回答する"):
                 st.session_state.answered = True
@@ -75,18 +75,22 @@ with tab2:
         if st.button(f"AIで{num_questions}問作成する"):
             with st.spinner("AIが試験問題を作成中..."):
                 prompt = f"""
-                以下の資料から、消防昇任試験に出そうな5択問題を{num_questions}問作成してください。
-                出力は必ず以下のカンマ区切りのリスト形式（JSON）にしてください。
+                あなたは消防昇任試験の専門家です。
+                以下の資料から、試験に出そうな5択問題を{num_questions}問作成してください。
+                出力は必ず以下のJSON形式のリストのみにしてください（余計な説明は不要です）。
                 [
                   {{"問題": "問題文", "選択肢": "A,B,C,D,E", "正解": "A", "解説": "解説文"}}
                 ]
                 資料:
                 {full_text[:3000]}
                 """
-                response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
+                # 安定版の呼び出し方
+                response = model.generate_content(prompt)
                 
                 try:
-                    clean_res = response.text.replace('```json', '').replace('```', '').strip()
+                    # AIの回答からJSON部分を抽出
+                    text_res = response.text
+                    clean_res = text_res.replace('```json', '').replace('```', '').strip()
                     new_problems = json.loads(clean_res)
                     
                     for p in new_problems:
@@ -94,8 +98,8 @@ with tab2:
                     
                     st.success(f"{len(new_problems)}問の問題をデータベースに追加しました！")
                 except Exception as e:
-                    st.error("AIの回答を読み込めませんでした。もう一度試してください。")
-                    st.write(response.text)
+                    st.error("AIの回答を解析できませんでした。もう一度試してください。")
+                    st.write("AIの回答内容:", response.text)
 
 # --- タブ3: データベース ---
 with tab3:
@@ -103,7 +107,9 @@ with tab3:
     all_data = worksheet.get_all_records()
     if all_data:
         st.dataframe(pd.DataFrame(all_data))
+    
     if st.button("全データを消去（リセット）"):
         worksheet.clear()
         worksheet.append_row(["問題", "選択肢", "正解", "解説"])
+        st.success("データベースをリセットしました。")
         st.rerun()
