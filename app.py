@@ -4,29 +4,38 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 import json
 import pdfplumber
-import google.generativeai as genai  # 安定版に変更
+import google.generativeai as genai
 
 # --- 1. 初期設定（スプレッドシート & Gemini） ---
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+# スコープの設定（Googleのサービスを使うための許可証の種類）
+SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/drive'
+]
 
 try:
-    # Googleスプレッドシート認証
+    # --- Googleスプレッドシートの認証 ---
     creds_json_str = st.secrets["gcp_service_account"]
     creds_dict = json.loads(creds_json_str)
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     gc = gspread.authorize(creds)
+    
+    # スプレッドシートを開く
     spreadsheet = gc.open("消防アプリDB")
     worksheet = spreadsheet.worksheet("シート1")
     
-    # Gemini認証（安定版の書き方）
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    # --- Geminiの認証（安定版） ---
+    # APIキーを取得して設定
+    gemini_key = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=gemini_key)
+    # モデルの準備（gemini-1.5-flash を使用）
     model = genai.GenerativeModel('gemini-1.5-flash')
     
 except Exception as e:
     st.error(f"接続エラーが発生しました。設定を確認してください: {e}")
     st.stop()
 
-# --- 2. アプリ画面の構成 ---
+# --- 2. アプリの画面構成 ---
 st.title("🚒 消防昇任試験 AI対策アプリ")
 
 tab1, tab2, tab3 = st.tabs(["🔥 テストを受ける", "🤖 AIで問題を作る", "📊 データベース"])
@@ -45,6 +54,7 @@ with tab1:
             q = st.session_state.current_q
             st.subheader(f"問題: {q['問題']}")
             
+            # 選択肢をリストに変換
             options = str(q['選択肢']).split(',')
             user_choice = st.radio("答えを選んでください", options, key="quiz_radio")
             
@@ -67,7 +77,13 @@ with tab2:
     
     if uploaded_file:
         with pdfplumber.open(uploaded_file) as pdf:
-            full_text = "".join([page.extract_text() for page in pdf.pages if page.extract_text()])
+            # 全ページのテキストを結合
+            text_list = []
+            for page in pdf.pages:
+                extracted = page.extract_text()
+                if extracted:
+                    text_list.append(extracted)
+            full_text = "".join(text_list)
         
         st.write("📄 PDFの読み込みが完了しました。")
         num_questions = st.slider("作成する問題数", 1, 5, 3)
@@ -77,18 +93,19 @@ with tab2:
                 prompt = f"""
                 あなたは消防昇任試験の専門家です。
                 以下の資料から、試験に出そうな5択問題を{num_questions}問作成してください。
-                出力は必ず以下のJSON形式のリストのみにしてください（余計な説明は不要です）。
+                出力は必ず以下のJSON形式のリストのみにしてください。
                 [
                   {{"問題": "問題文", "選択肢": "A,B,C,D,E", "正解": "A", "解説": "解説文"}}
                 ]
                 資料:
                 {full_text[:3000]}
                 """
-                # 安定版の呼び出し方
+                
+                # AIに依頼
                 response = model.generate_content(prompt)
                 
                 try:
-                    # AIの回答からJSON部分を抽出
+                    # AIの回答から不要な記号を削ってJSONとして読み込む
                     text_res = response.text
                     clean_res = text_res.replace('```json', '').replace('```', '').strip()
                     new_problems = json.loads(clean_res)
@@ -99,7 +116,7 @@ with tab2:
                     st.success(f"{len(new_problems)}問の問題をデータベースに追加しました！")
                 except Exception as e:
                     st.error("AIの回答を解析できませんでした。もう一度試してください。")
-                    st.write("AIの回答内容:", response.text)
+                    st.write("AIの回答:", response.text)
 
 # --- タブ3: データベース ---
 with tab3:
