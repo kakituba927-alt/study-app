@@ -84,7 +84,7 @@ with tab2:
                 資料:
                 {full_text[:3000]}
                 """
-                response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+               response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
                 # JSONとして解析
                 try:
                     # Geminiが```json ... ```で囲む場合があるためトリミング
