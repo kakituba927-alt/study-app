@@ -4,13 +4,23 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 import json
 
-# --- Googleスプレッドシートへの接続 ---
+# --- Googleスプレッドシートへの接続設定 ---
+# どの機能（スコープ）を使うか指定します
+SCOPES = [
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/drive'
+]
+
 try:
+    # SecretsからJSON文字列を取得
     creds_json_str = st.secrets["gcp_service_account"]
     creds_dict = json.loads(creds_json_str)
-    creds = Credentials.from_service_account_info(creds_dict)
+    
+    # スコープを含めて認証情報を作成 ◀◀ここを修正しました！
+    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     gc = gspread.authorize(creds)
 
+    # スプレッドシートを開く
     spreadsheet = gc.open("消防アプリDB")
     worksheet = spreadsheet.worksheet("シート1")
     
@@ -21,7 +31,7 @@ except Exception as e:
     st.error(e)
     st.stop()
 
-# --- アプリの画面 ---
+# --- アプリの画面表示 ---
 st.title("🚒 消防昇任試験対策アプリ")
 st.write("ここにみんなで問題を共有します！")
 
@@ -44,6 +54,7 @@ with tab2:
         answer = st.text_input("正解を入力してください")
         submitted = st.form_submit_button("この問題を追加する")
         if submitted:
+            # スプレッドシートに書き込み
             worksheet.append_row([question, answer])
             st.success("新しい問題を追加しました！")
 
