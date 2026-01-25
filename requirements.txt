@@ -1,12 +1,5 @@
-<<<<<<< HEAD
 streamlit
 pandas
-google-genai
 gspread
-=======
-streamlit
-pandas
-google-genai
-gspread
->>>>>>> 7b1132744267628dcff5c0d32e4337c26860a18b
 gspread-dataframe
+google-genai
