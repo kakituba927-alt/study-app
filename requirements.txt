@@ -2,5 +2,5 @@ streamlit
 pandas
 gspread
 gspread-dataframe
-google-generativeai
+google-generativeai>=0.8.3
 pdfplumber
