@@ -4,7 +4,7 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 import json
 import pdfplumber
-from google import genai
+import google.generativeai as genai
 
 # --- 1. 初期設定 ---
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -18,8 +18,10 @@ try:
     spreadsheet = gc.open("消防アプリDB")
     worksheet = spreadsheet.worksheet("シート1")
     
-    # Gemini認証
-    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+    # Gemini認証（ショップアプリと同じ安定版ライブラリを使用）
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    # モデル名をシンプルに指定（これが一番安定します）
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
 except Exception as e:
     st.error(f"接続エラーが発生しました: {e}")
@@ -73,10 +75,7 @@ with tab2:
             num_questions = st.slider("作成する問題数", 1, 5, 1)
             
             if st.button(f"AIで{num_questions}問作成する"):
-                with st.spinner("AIが試験問題を作成中..."):
-                    # ここが修正ポイント：モデル名をより認識されやすい形式にします
-                    model_id = "gemini-1.5-flash"
-                    
+                with st.spinner("AIが問題を作成しています。30秒ほどお待ちください..."):
                     prompt = f"""
                     消防昇任試験の専門家として、以下の資料から5択問題を{num_questions}問作成してください。
                     必ず以下のJSON形式のリストのみで回答してください。
@@ -84,10 +83,11 @@ with tab2:
                       {{"問題": "問題文", "選択肢": "A,B,C,D,E", "正解": "A", "解説": "解説文"}}
                     ]
                     資料:
-                    {full_text[:3500]}
+                    {full_text[:3000]}
                     """
                     try:
-                        response = client.models.generate_content(model=model_id, contents=prompt)
+                        # 安定版の呼び出し方式
+                        response = model.generate_content(prompt)
                         text_res = response.text.replace('```json', '').replace('```', '').strip()
                         new_problems = json.loads(text_res)
                         
@@ -97,18 +97,10 @@ with tab2:
                         st.success(f"✅ {len(new_problems)}問追加しました！")
                         st.balloons()
                     except Exception as e:
-                        st.error("AIが回答できませんでした。モデルを gemini-2.0-flash に切り替えて再試行します...")
-                        # 1.5で404が出る場合の予備策
-                        try:
-                            response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-                            text_res = response.text.replace('```json', '').replace('```', '').strip()
-                            new_problems = json.loads(text_res)
-                            for p in new_problems:
-                                worksheet.append_row([p['問題'], p['選択肢'], p['正解'], p['解説']])
-                            st.success(f"✅ {len(new_problems)}問追加しました！")
-                        except Exception as e2:
-                            st.error("やはりエラーが発生しました。時間を置いてください。")
-                            st.write(e2)
+                        st.error("AIが回答できませんでした。もう一度試してください。")
+                        st.write(f"エラー詳細: {e}")
+        else:
+            st.error("文字が読み取れませんでした。")
 
 # --- タブ3: データ確認 ---
 with tab3:
@@ -116,7 +108,3 @@ with tab3:
     all_data = worksheet.get_all_records()
     if all_data:
         st.dataframe(pd.DataFrame(all_data))
-        if st.button("全データを消去"):
-            worksheet.clear()
-            worksheet.append_row(["問題", "選択肢", "正解", "解説"])
-            st.rerun()
