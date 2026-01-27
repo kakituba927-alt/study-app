@@ -18,11 +18,11 @@ try:
     spreadsheet = gc.open("消防アプリDB")
     worksheet = spreadsheet.worksheet("シート1")
     
-    # Gemini認証（ショップアプリと同じ最新方式）
+    # Gemini認証
     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
     
 except Exception as e:
-    st.error(f"接続エラー: {e}")
+    st.error(f"接続エラーが発生しました: {e}")
     st.stop()
 
 # --- 2. 画面構成 ---
@@ -69,13 +69,13 @@ with tab2:
             full_text = "".join(text_list)
         
         if full_text:
-            st.write("📄 PDFの文字読み込みに成功しました！")
+            st.write("📄 PDFの文字読み込みに成功しました。")
             num_questions = st.slider("作成する問題数", 1, 5, 1)
             
             if st.button(f"AIで{num_questions}問作成する"):
                 with st.spinner("AIが試験問題を作成中..."):
                     prompt = f"""
-                    あなたは消防昇任試験の専門家です。以下の資料から5択問題を{num_questions}問作成してください。
+                    消防昇任試験の専門家として、以下の資料から5択問題を{num_questions}問作成してください。
                     必ず以下のJSON形式のリストのみで回答してください。
                     [
                       {{"問題": "問題文", "選択肢": "A,B,C,D,E", "正解": "A", "解説": "解説文"}}
@@ -84,23 +84,20 @@ with tab2:
                     {full_text[:3000]}
                     """
                     try:
-                        # ショップアプリと同じ呼び出し方
                         response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
-                        
-                        # AIの回答をクリーニングして保存
                         text_res = response.text.replace('```json', '').replace('```', '').strip()
                         new_problems = json.loads(text_res)
                         
                         for p in new_problems:
                             worksheet.append_row([p['問題'], p['選択肢'], p['正解'], p['解説']])
                         
-                        st.success(f"✅ {len(new_problems)}問の問題をデータベースに追加しました！")
-                        st.balloons() # お祝いの風船
+                        st.success(f"✅ {len(new_problems)}問追加しました！")
+                        st.balloons()
                     except Exception as e:
-                        st.error("AIがうまく回答できませんでした。もう一度ボタンを押してください。")
+                        st.error("AIが回答できませんでした。もう一度お試しください。")
                         st.write(e)
         else:
-            st.error("PDFから文字を読み取れませんでした。画像形式のPDF（スキャンしたもの）ではないか確認してください。")
+            st.error("文字が読み取れませんでした。")
 
 # --- タブ3: データ確認 ---
 with tab3:
@@ -108,4 +105,9 @@ with tab3:
     all_data = worksheet.get_all_records()
     if all_data:
         st.dataframe(pd.DataFrame(all_data))
-    if
+        if st.button("全データを消去してリセット"):
+            worksheet.clear()
+            worksheet.append_row(["問題", "選択肢", "正解", "解説"])
+            st.rerun()
+    else:
+        st.info("データがありません。")
