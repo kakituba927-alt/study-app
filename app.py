@@ -4,7 +4,7 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 import json
 import pdfplumber
-import google.generativeai as genai
+from google import genai
 
 # --- 1. 初期設定 ---
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -18,9 +18,8 @@ try:
     spreadsheet = gc.open("消防アプリDB")
     worksheet = spreadsheet.worksheet("シート1")
     
-    # Gemini認証（安定版）
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Gemini認証（ショップアプリと同じ最新方式）
+    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
     
 except Exception as e:
     st.error(f"接続エラー: {e}")
@@ -66,9 +65,47 @@ with tab2:
     
     if uploaded_file:
         with pdfplumber.open(uploaded_file) as pdf:
-            text_list = []
-            for page in pdf.pages:
-                extracted = page.extract_text()
-                if extracted:
-                    text_list.append(extracted)
+            text_list = [page.extract_text() for page in pdf.pages if page.extract_text()]
             full_text = "".join(text_list)
+        
+        if full_text:
+            st.write("📄 PDFの文字読み込みに成功しました！")
+            num_questions = st.slider("作成する問題数", 1, 5, 1)
+            
+            if st.button(f"AIで{num_questions}問作成する"):
+                with st.spinner("AIが試験問題を作成中..."):
+                    prompt = f"""
+                    あなたは消防昇任試験の専門家です。以下の資料から5択問題を{num_questions}問作成してください。
+                    必ず以下のJSON形式のリストのみで回答してください。
+                    [
+                      {{"問題": "問題文", "選択肢": "A,B,C,D,E", "正解": "A", "解説": "解説文"}}
+                    ]
+                    資料:
+                    {full_text[:3000]}
+                    """
+                    try:
+                        # ショップアプリと同じ呼び出し方
+                        response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
+                        
+                        # AIの回答をクリーニングして保存
+                        text_res = response.text.replace('```json', '').replace('```', '').strip()
+                        new_problems = json.loads(text_res)
+                        
+                        for p in new_problems:
+                            worksheet.append_row([p['問題'], p['選択肢'], p['正解'], p['解説']])
+                        
+                        st.success(f"✅ {len(new_problems)}問の問題をデータベースに追加しました！")
+                        st.balloons() # お祝いの風船
+                    except Exception as e:
+                        st.error("AIがうまく回答できませんでした。もう一度ボタンを押してください。")
+                        st.write(e)
+        else:
+            st.error("PDFから文字を読み取れませんでした。画像形式のPDF（スキャンしたもの）ではないか確認してください。")
+
+# --- タブ3: データ確認 ---
+with tab3:
+    st.header("登録済みの全問題")
+    all_data = worksheet.get_all_records()
+    if all_data:
+        st.dataframe(pd.DataFrame(all_data))
+    if
