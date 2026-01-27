@@ -86,7 +86,7 @@ with tab2:
                     try:
                         # Gemini 2.0 Flash を呼び出し
                         response = client.models.generate_content(
-                            model="gemini-2.0-flash", 
+                            model="gemini-2.5-flash" 
                             contents=prompt
                         )
                         
