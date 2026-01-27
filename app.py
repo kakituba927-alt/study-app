@@ -18,9 +18,8 @@ try:
     spreadsheet = gc.open("消防アプリDB")
     worksheet = spreadsheet.worksheet("シート1")
     
-    # Gemini認証
+    # Gemini認証（安定版）
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    # 修正箇所：余計な修飾を消してシンプルにしました
     model = genai.GenerativeModel('gemini-1.5-flash')
     
 except Exception as e:
@@ -73,39 +72,3 @@ with tab2:
                 if extracted:
                     text_list.append(extracted)
             full_text = "".join(text_list)
-        
-        st.write("📄 PDF読み込み完了")
-        num_questions = st.slider("作成する問題数", 1, 5, 3)
-        
-        if st.button(f"AIで{num_questions}問作成する"):
-            with st.spinner("AIが考え中です..."):
-                prompt = f"""
-                消防昇任試験の専門家として、以下の資料から5択問題を{num_questions}問作成してください。
-                出力は以下のJSON形式のリストのみにしてください（コードブロック不要）。
-                [
-                  {{"問題": "問題文", "選択肢": "A,B,C,D,E", "正解": "A", "解説": "解説文"}}
-                ]
-                資料:
-                {full_text[:4000]}
-                """
-                
-                try:
-                    response = model.generate_content(prompt)
-                    # AIの回答をクリーニング
-                    text_res = response.text.replace('```json', '').replace('```', '').strip()
-                    new_problems = json.loads(text_res)
-                    
-                    for p in new_problems:
-                        worksheet.append_row([p['問題'], p['選択肢'], p['正解'], p['解説']])
-                    
-                    st.success(f"{len(new_problems)}問追加しました！")
-                except Exception as e:
-                    st.error("エラーが発生しました。もう一度試してください。")
-                    st.write(e)
-
-# --- タブ3: データ確認 ---
-with tab3:
-    st.header("登録済みの全問題")
-    all_data = worksheet.get_all_records()
-    if all_data:
-        st.dataframe(pd.DataFrame(all_data))
