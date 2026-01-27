@@ -27,7 +27,7 @@ except Exception as e:
 
 # --- 2. 画面構成 ---
 st.title("🚒 消防昇任試験 AI対策アプリ")
-st.caption("Model: Gemini 2.0 Flash (Experimental)")
+st.caption("Model:"gemini-2.5-flash")
 
 tab1, tab2, tab3 = st.tabs(["🔥 テストを受ける", "🤖 AIで問題を作る", "📊 データベース"])
 
