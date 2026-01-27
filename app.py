@@ -5,6 +5,7 @@ import pandas as pd
 import json
 import pdfplumber
 from google import genai
+from google.genai import errors
 
 # --- 1. 初期設定 ---
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -61,7 +62,7 @@ with tab1:
 # --- タブ2: 問題作成 ---
 with tab2:
     st.header("PDF資料から問題を作成")
-    uploaded_file = st.file_uploader("PDFをアップロードしてください", type="pdf")
+    uploaded_file = st.file_uploader("PDFファイルをアップロードしてください", type="pdf")
     
     if uploaded_file:
         with pdfplumber.open(uploaded_file) as pdf:
@@ -75,28 +76,39 @@ with tab2:
             if st.button(f"AIで{num_questions}問作成する"):
                 with st.spinner("AIが試験問題を作成中..."):
                     prompt = f"""
-                    消防昇任試験の専門家として、以下の資料から5択問題を{num_questions}問作成してください。
-                    必ず以下のJSON形式のリストのみで回答してください。
+                    消防昇任試験の専門家として、資料から5択問題を{num_questions}問作成し、以下のJSON形式のリストのみで回答してください。
                     [
                       {{"問題": "問題文", "選択肢": "A,B,C,D,E", "正解": "A", "解説": "解説文"}}
                     ]
                     資料:
                     {full_text[:3000]}
                     """
-                    try:
-                        # ショップアプリと同じ呼び出し方式
-                        response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
-                        
-                        text_res = response.text.replace('```json', '').replace('```', '').strip()
-                        new_problems = json.loads(text_res)
-                        
-                        for p in new_problems:
-                            worksheet.append_row([p['問題'], p['選択肢'], p['正解'], p['解説']])
-                        
-                        st.success(f"✅ {len(new_problems)}問追加しました！")
-                        st.balloons()
-                    except Exception as e:
-                        st.error(f"エラーが発生しました: {e}")
+                    
+                    # 404エラーを回避するために、複数のモデル名を順番に試す「執念のループ」
+                    success = False
+                    # 試すモデル名のリスト（住所の書き方を微妙に変えています）
+                    candidate_models = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash"]
+                    
+                    for model_id in candidate_models:
+                        try:
+                            response = client.models.generate_content(model=model_id, contents=prompt)
+                            text_res = response.text.replace('```json', '').replace('```', '').strip()
+                            new_problems = json.loads(text_res)
+                            
+                            for p in new_problems:
+                                worksheet.append_row([p['問題'], p['選択肢'], p['正解'], p['解説']])
+                            
+                            st.success(f"✅ モデル '{model_id}' で作成に成功しました！")
+                            st.balloons()
+                            success = True
+                            break # 成功したらループを抜ける
+                        except Exception as e:
+                            # 404や429が出たら、次のモデルへ
+                            st.warning(f"モデル '{model_id}' は現在利用できません。次の候補を試します...")
+                            continue
+                    
+                    if not success:
+                        st.error("すべてのAIモデルが利用できませんでした。1分ほど待ってからもう一度お試しください。")
         else:
             st.error("文字が読み取れませんでした。")
 
