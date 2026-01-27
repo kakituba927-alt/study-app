@@ -86,7 +86,7 @@ with tab2:
                     try:
                         # 429エラーを避けるため、安定版の 1.5-flash を使用します
                         response = client.models.generate_content(
-                            model="gemini-1.5-flash", 
+                            model="gemini-2.5-flash", 
                             contents=prompt
                         )
                         
