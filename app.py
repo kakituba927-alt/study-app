@@ -5,7 +5,7 @@ import pandas as pd
 import json
 import pdfplumber
 from google import genai
-from PIL import Image # 画像処理用に追加
+from PIL import Image
 import re
 
 # --- 1. 初期設定 ---
@@ -41,7 +41,8 @@ with tab1:
 
         if "q" in st.session_state:
             q = st.session_state.q
-            st.subheader(f"問題: {q['問題']}")
+            st.markdown(f"### **問題**\n{q['問題']}") # 問題文を見やすく
+            
             opt_raw = str(q['選択肢'])
             if ',' in opt_raw:
                 options = opt_raw.split(',')
@@ -59,48 +60,49 @@ with tab1:
                         st.success("⭕ 正解！！")
                     else:
                         st.error(f"❌ 不正解... 正解は【{q['正解']}】でした。")
+                        # 復習用保存
                         wrong_data = worksheet_wrong.get_all_records()
                         if not any(d['問題'] == q['問題'] for d in wrong_data):
                             worksheet_wrong.append_row([q['問題'], opt_raw, q['正解'], q['解説']])
-                    st.info(f"💡 解説: {q['解説']}")
+                    st.info(f"💡 解説:\n{q['解説']}")
     else:
         st.info(f"{mode}のデータがありません。")
 
-# --- タブ2: AIで問題を作る（PDFと画像の両方に対応） ---
+# --- タブ2: AIで問題を作る ---
 with tab2:
     st.header("資料から問題を作成")
-    # jpg, png, jpeg を追加
-    uploaded_file = st.file_uploader("PDFまたは写真(画像)をアップロードしてください", type=["pdf", "jpg", "png", "jpeg"])
+    problem_type = st.selectbox("作成する問題の形式", ["条文の虫食い（穴埋め）", "普通の実務・理論問題"])
+    uploaded_file = st.file_uploader("PDFまたは写真をアップロード", type=["pdf", "jpg", "png", "jpeg"])
     
     if uploaded_file:
         content_for_ai = []
-        
         if uploaded_file.type == "application/pdf":
-            # PDFの処理
             with pdfplumber.open(uploaded_file) as pdf:
                 text = "".join([p.extract_text() for p in pdf.pages if p.extract_text()])
             content_for_ai.append(text)
-            st.success("📄 PDFの文字読み込みに成功しました！")
         else:
-            # 画像の処理
             img = Image.open(uploaded_file)
             content_for_ai.append(img)
-            st.image(img, caption="アップロードされた写真", use_container_width=True)
-            st.success("📸 写真の読み込みに成功しました！")
+            st.image(img, caption="アップロード画像", use_container_width=True)
         
         num_q = st.slider("作成する問題数", 1, 5, 1)
         if st.button(f"AIで{num_q}問作成する"):
-            with st.spinner("AIが資料を分析して問題を作成中..."):
+            with st.spinner("AIが試験問題を作成中..."):
+                # 形式に応じた指示の切り替え
+                type_instr = "条文の重要な用語を（ ）にした穴埋め問題" if problem_type == "条文の虫食い（穴埋め）" else "5択の知識問題"
+                
                 prompt = f"""
-                あなたは消防試験の専門家です。提供された資料（テキストまたは画像）から重要度の高い5択問題を{num_q}問作成してください。
-                【重要】選択肢は必ず「A:〇〇,B:〇〇,C:〇〇,D:〇〇,E:〇〇」のように、各項目をカンマ(,)で区切ってください。
-                必ず以下のJSON形式のリストのみで回答してください。
+                あなたは消防試験の専門家です。提供された資料から、重要度の高い{type_instr}を{num_q}問作成してください。
+                【ルール】
+                1. 選択肢は「A:〇〇,B:〇〇,C:〇〇,D:〇〇,E:〇〇」のようにカンマで区切ってください。
+                2. 正解は「A」のようにアルファベット1文字で指定してください。
+                3. 解説には、根拠となる条文番号や理由を詳しく書いてください。
+                4. 回答は必ず以下のJSON形式のリストのみで返してください。
                 [
                   {{"問題": "問題文", "選択肢": "A:..,B:..,C:..,D:..,E:..", "正解": "A", "解説": "解説文"}}
                 ]
                 """
                 try:
-                    # AIにテキストまたは画像を渡す
                     response = client.models.generate_content(
                         model="gemini-2.5-flash",
                         contents=content_for_ai + [prompt]
@@ -109,16 +111,15 @@ with tab2:
                     new_problems = json.loads(res_text)
                     for p in new_problems:
                         worksheet_main.append_row([p['問題'], p['選択肢'], p['正解'], p['解説']])
-                    st.success(f"✅ {len(new_problems)}問の問題をデータベースに追加しました！")
+                    st.success(f"✅ {len(new_problems)}問追加しました！")
                     st.balloons()
                 except Exception as e:
-                    st.error(f"AIエラーが発生しました。時間を置いてもう一度試してください。\n{e}")
+                    st.error(f"AIエラー: {e}")
 
 # --- タブ3: データベース ---
 with tab3:
-    if st.button("メイン問題をリセット"):
+    if st.button("全データを削除（リセット）"):
         worksheet_main.clear()
         worksheet_main.append_row(["問題", "選択肢", "正解", "解説"])
         st.rerun()
-    st.subheader("現在の問題リスト")
     st.dataframe(pd.DataFrame(worksheet_main.get_all_records()))
